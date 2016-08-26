@@ -9,12 +9,15 @@
 #define condition(x,y) (v(x) && v(y))
 #define valid(x,y) if(condition(x,y))
 #define notvalid if(!condition(x,y))
+#define bossIndex zombiesInPlague-1
 
 char b[X][X][X], playerX = 10, playerY = 10, direction;
 char displayBoard[X][X + 1];
 int bulletX, bulletY;
 double bulletPower = 1;
-int health = 100;
+int health = 1009999;
+int maxHealth = 100;
+int bossFactor = 30;
 
 struct Zombie
 {
@@ -24,6 +27,11 @@ struct Zombie
     int health;
 };
 
+struct BossBomb
+{
+    int x, y, type, countDown;
+} bossBomb;
+
 Zombie zombies[999];
 int plague;
 int zombiesInPlague;
@@ -31,7 +39,7 @@ int zombiesAlive = 0;
 
 void generateZombies()
 {
-    zombiesInPlague = zombiesAlive = plague*20;
+    zombiesInPlague = zombiesAlive = plague*15;
 
     for (int i = 0; i < zombiesInPlague; ++i)
     {
@@ -50,11 +58,11 @@ void generateZombies()
         else
             y += rand() % X;*/
 
-        int step = 7;
+        int step = 2;
 
         if (i % 2)
         {
-            int v = rand() % ((i / step + 1) * step);
+            int v = rand() % ((i / step + 1) * step) + i;
             if (rand() % 2)
             {
                 v = -v;
@@ -70,7 +78,7 @@ void generateZombies()
 
         if (!(i % 2))
         {
-            int v = rand() % ((i / step + 1) * step);
+            int v = rand() % ((i / step + 1) * step) + i;
             if (rand() % 2)
             {
                 v = -v;
@@ -93,10 +101,10 @@ void generateZombies()
         zombies[i].x = x;
         zombies[i].y = y; 
 
-        if (i == zombiesInPlague)
+        if (i == bossIndex)
         {
-            zombies[i].health = plague * 15;
-            zombies[i].health = plague * 15;
+            zombies[i].strength = plague * bossFactor/3;
+            zombies[i].health = plague * bossFactor;
         }
         else if (r < 10)
         {
@@ -130,7 +138,7 @@ void upgradeStats()
         }
         if (direction == 'h')
         {
-            health += 10;
+            maxHealth += 30;
             --points;
         }
     }
@@ -142,8 +150,31 @@ void newPlague()
     //bulletPower = plague*2;
     generateZombies();
     upgradeStats();
+    maxHealth += 10;
+    health = maxHealth;
+}
 
-    health = 100 + plague * 10;
+void bossBehavior()
+{
+    if (zombies[bossIndex].alive && bossBomb.type == -1)
+    {
+        switch (rand() % 4)
+        {
+        case 1:
+        case 2:
+            bossBomb.x = rand() % X;
+            bossBomb.y = rand() % X;
+            bossBomb.type = rand() % 2;
+            bossBomb.countDown = 1;
+        case 3:
+        case 4:
+            break;
+        }
+    }
+    else
+    {
+
+    }
 }
 
 void zombiesBehavior()
@@ -190,6 +221,11 @@ void zombiesBehavior()
             playerY >= zombies[i].y - 1 && playerY <= zombies[i].y + 1)
         {
             health -= zombies[i].strength;
+        }
+
+        if (i == bossIndex && condition(zombies[bossIndex].x, zombies[bossIndex].y))
+        {
+            bossBehavior();
         }
     }
 }
@@ -280,6 +316,79 @@ void shoot()
     }
 }
 
+int bossBombArea()
+{
+    double percent = 1.0 - (double)zombies[bossIndex].health / (double)(plague * bossFactor);
+    return 4 * percent + 1;
+}
+
+void bossBombBehavior()
+{
+    int rx, ry, a = 4;
+    
+    switch (bossBomb.type)
+    {
+    case 0: // +
+        if (playerX == bossBomb.x || playerY == bossBomb.y)
+            health -= zombies[bossIndex].strength;
+        break;
+
+    case 1: //area
+        rx = abs(playerX - bossBomb.x);
+        ry = abs(playerY - bossBomb.y);
+        if(rx < bossBombArea()*2+1 && ry < bossBombArea()*2+1)
+            health -= zombies[bossIndex].strength;
+        break;
+    }
+}
+
+void drawBossBomb()
+{
+    if (bossBomb.countDown)
+    {
+        switch (bossBomb.type)
+        {
+        case 0:
+            displayBoard[bossBomb.y][bossBomb.x] = 'X';
+            break;
+        case 1:
+            displayBoard[bossBomb.y][bossBomb.x] = 'O';
+            break;
+        }
+    }
+    else
+    {
+        int v = bossBombArea() * 2 + 1;
+        switch (bossBomb.type)
+        {
+        case 0:
+            for (int i = 0; i < X; ++i)
+            {
+                displayBoard[i][bossBomb.x] = 'X';
+                displayBoard[bossBomb.y][i] = 'X';
+            }
+            break;
+
+        case 1:
+
+
+            for (int i = 0; i < bossBombArea()*2+1; ++i)
+            {
+                for (int j = 0; j < bossBombArea()*2+1; ++j)
+                {
+                    int x = 0, y = 0;
+                    x = bossBomb.x - bossBombArea() + i;
+                    y = bossBomb.y - bossBombArea() + j;
+                    if (condition(x, y))
+                        displayBoard[y][x] = 'O';
+                }
+            }
+            break;
+        }
+
+    }
+}
+
 void display()
 {
     for (int i = 0; i < X; ++i)
@@ -290,7 +399,12 @@ void display()
     {
         if(zombies[i].alive)
             valid(zombies[i].x, zombies[i].y)
+            {
+            if (i == bossIndex)
+                board(zombies[i].y, zombies[i].x, 0) = -1;
+            else
                 board(zombies[i].y, zombies[i].x, 0) += zombies[i].health;
+            }
     }
 
     for (int y =0; y < X; ++y)
@@ -301,11 +415,23 @@ void display()
                 displayBoard[y][x] = zombiesCount < 10 ? zombiesCount + '0' : 
                                      zombiesCount < 20 ? '+' :
                                      zombiesCount < 30 ? '*' : '!';
+            else if(board(y, x, 0)==-1)
+                displayBoard[y][x] = 'B';
             else
                 displayBoard[y][x] = ' ';
-
-            //board(y, x, 0) = 0;
         }
+
+    if (bossBomb.countDown > 0)
+    {
+        drawBossBomb();
+        bossBomb.countDown--;
+    }
+    else if (bossBomb.type != -1)
+    {
+        drawBossBomb();
+        bossBombBehavior();
+        bossBomb.type = -1;
+    }
 
     displayBoard[playerY][playerX] = 'P';
 
@@ -315,6 +441,7 @@ void display()
     std::cout << "health: " << ((health > 0) ? health : 0) << "\n";
     std::cout << "bullet power: " << bulletPower << "\n";
     std::cout << "zombies left: " << zombiesAlive << "\n";
+    std::cout << "boss: " << zombies[bossIndex].health << "\n";
 }
 
 int main()
@@ -324,7 +451,7 @@ int main()
         if (!zombiesAlive)
             newPlague();
 
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < 2; ++i)
         {
             std::cin >> direction;
             if (direction >= '0' && direction <= '9')
